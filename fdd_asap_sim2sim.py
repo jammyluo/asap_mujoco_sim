@@ -11,6 +11,7 @@ import numpy as np
 import onnxruntime
 import yaml
 import os
+import time
 from scipy.spatial.transform import Rotation as R
 from types import SimpleNamespace
 
@@ -217,6 +218,15 @@ def run_mujoco(cfg):
         hist_obs.append(hist_dict[key].reshape(1,-1))
     hist_obs_c = np.concatenate(hist_obs,axis=1)
     counter = 0
+    
+    # 渲染频率控制
+    render_frequency = 60  # 目标60 FPS
+    render_interval = max(1, int(1.0 / (render_frequency * cfg.simulation_dt)))
+    
+    # 性能监控
+    start_time = time.time()
+    frame_count = 0
+    last_fps_time = start_time
 
     ## 执行回合
     for _ in range(int( cfg.simulation_duration / cfg.simulation_dt)):
@@ -236,7 +246,19 @@ def run_mujoco(cfg):
             action = policy.run(["action"], policy_input)[0]
             action = np.clip(action, -cfg.clip_actions, cfg.clip_actions)
             target_dof_pos = action * cfg.action_scale + cfg.default_dof_pos
-        viewer.render()
+        
+        # 只在特定频率下渲染，提高FPS
+        if counter % render_interval == 0:
+            viewer.render()
+            frame_count += 1
+            
+            # 每秒更新一次FPS显示
+            current_time = time.time()
+            if current_time - last_fps_time >= 1.0:
+                fps = frame_count / (current_time - last_fps_time)
+                print(f"当前FPS: {fps:.1f}")
+                frame_count = 0
+                last_fps_time = current_time
     viewer.close()
 
 
